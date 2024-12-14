@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Arduino Serial Reader</title>
+<style>
+  body { font-family: sans-serif; margin: 20px; }
+  #output {
+    white-space: pre-wrap;
+    background: #f2f2f2;
+    padding: 10px;
+    border: 1px solid #ccc;
+    height: 200px;
+    overflow-y: auto;
+  }
+  button { margin-top: 10px; }
+</style>
+</head>
+<body>
+<h1>Arduino Serial Reader</h1>
+<p>Click "Connect" to choose a serial port and start reading data from your Arduino.</p>
+<button id="connectBtn">Connect</button>
+<div id="output"></div>
+
+<script>
+  const connectBtn = document.getElementById('connectBtn');
+  const outputDiv = document.getElementById('output');
+  let port;
+  let reader;
+  let keepReading = false;
+
+  async function connect() {
+    try {
+      // Request a port from the user
+      port = await navigator.serial.requestPort();
+      // Open the port at a baud rate (match the Arduino's baud rate)
+      await port.open({ baudRate: 9600 });
+
+      const decoder = new TextDecoderStream();
+      const readableStreamClosed = port.readable.pipeTo(decoder.writable);
+      const inputStream = decoder.readable;
+      reader = inputStream.getReader();
+
+      keepReading = true;
+      readLoop();
+      connectBtn.textContent = 'Disconnect';
+    } catch (err) {
+      console.error('Error opening serial port:', err);
+    }
+  }
+
+  async function disconnect() {
+    keepReading = false;
+    if (reader) {
+      await reader.cancel();
+      reader.releaseLock();
+    }
+    if (port) {
+      await port.close();
+    }
+    connectBtn.textContent = 'Connect';
+  }
+
+  async function readLoop() {
+    while (keepReading) {
+      try {
+        const { value, done } = await reader.read();
+        if (done) {
+          // Reader has been canceled
+          break;
+        }
+        if (value) {
+          outputDiv.textContent += value;
+          outputDiv.scrollTop = outputDiv.scrollHeight;
+        }
+      } catch (error) {
+        console.error("Error reading from serial port:", error);
+        break;
+      }
+    }
+  }
+
+  connectBtn.addEventListener('click', () => {
+    if (port && port.readable) {
+      disconnect();
+    } else {
+      connect();
+    }
+  });
+</script>
+</body>
+</html>
